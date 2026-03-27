@@ -220,9 +220,14 @@ export const Screen = () => {
       const result = await whisperRef.current(offlineAudio);
       const text = result.text.trim();
       const emotion = emotionRef.current;
+      const videoUrl = URL.createObjectURL(blob);
       setMessages((prev) => [
         ...prev,
-        { role: "user", text: `[Recording]: "${text}" (Detected: ${emotion})` },
+        {
+          role: "user",
+          text: `[Recording]: "${text}" (Detected: ${emotion})`,
+          videoUrl,
+        },
         {
           role: "bot",
           text: `I heard you say: "${text}". You look like you're feeling ${emotion.toLowerCase()} right now.`,
@@ -333,6 +338,14 @@ export const Screen = () => {
                   }`}
                 >
                   {m.text}
+                  {m.videoUrl && (
+                    <video
+                      src={m.videoUrl}
+                      controls
+                      className="mt-2 w-full max-w-xs rounded-lg"
+                      muted
+                    />
+                  )}
                 </div>
               </div>
             ))}
