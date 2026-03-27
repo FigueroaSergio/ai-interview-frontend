@@ -5,7 +5,8 @@ import "@tensorflow/tfjs-core";
 import * as tf from "@tensorflow/tfjs";
 import { pipeline, env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
-
+import { useMachine } from "@xstate/react";
+import { interviewMachine } from "./core/state";
 const EMOTIONS = ["Neutral", "Happy", "Sad", "Angry", "Surprised"];
 const VIDEO_WIDTH = 640;
 const VIDEO_HEIGHT = 480;
@@ -209,6 +210,7 @@ export const Screen = () => {
     offscreen.height = VIDEO_HEIGHT;
     offscreenRef.current = offscreen;
   }, []);
+  const [state, send] = useMachine(interviewMachine);
 
   useEffect(() => {
     if (
@@ -457,7 +459,7 @@ export const Screen = () => {
 
       const emotion = emotionRef.current;
       const videoUrl = URL.createObjectURL(blob);
-
+      send({ type: "SUBMIT", payload: text });
       setMessages((prev) => [
         ...prev,
         {
@@ -563,9 +565,9 @@ export const Screen = () => {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900/20">
-            {messages.map((m) => (
+            {state.context.transcript.map((m, idx) => (
               <div
-                key={m.id}
+                key={idx}
                 className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
@@ -575,7 +577,7 @@ export const Screen = () => {
                       : "bg-slate-700 text-slate-100 rounded-tl-none border border-slate-600"
                   }`}
                 >
-                  {m.text}
+                  {m.content}
 
                   {m.videoUrl && (
                     <video
