@@ -217,7 +217,10 @@ export const Screen = () => {
       const arrayBuffer = await blob.arrayBuffer();
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
       const offlineAudio = audioBuffer.getChannelData(0);
-      const result = await whisperRef.current(offlineAudio);
+      const result = await whisperRef.current(offlineAudio, {
+        return_timestamps: "word",
+      });
+      console.log(result);
       const text = result.text.trim();
       const emotion = emotionRef.current;
       const videoUrl = URL.createObjectURL(blob);
