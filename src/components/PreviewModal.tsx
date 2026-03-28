@@ -16,8 +16,18 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
   handleSend,
 }) => {
   return (
-    <div className="fixed inset-0 bg-surface/80 backdrop-blur-xl flex justify-center items-center z-50 p-6">
-      <div className="bg-surface-container-lowest p-10 rounded-[1.5rem] max-w-md w-full shadow-[0_20px_50px_rgba(23,28,38,0.05)]">
+    <div className="fixed inset-0 bg-surface/80 backdrop-blur-xl flex justify-center items-center z-50 p-6 animate-[fadeIn_0.3s_ease-out]">
+      <div className="bg-surface-container-lowest p-10 rounded-[1.5rem] max-w-md w-full shadow-[0_20px_50px_rgba(23,28,38,0.05)] animate-[slideInUp_0.4s_ease-out]">
+        <style>{`
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          @keyframes slideInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+        `}</style>
         <h2 className="text-[2rem] leading-tight font-medium mb-6 text-on-surface tracking-tight">Review Recording</h2>
         
         <div className="bg-surface-container-low p-6 rounded-[1.5rem] mb-6 flex flex-col gap-4">

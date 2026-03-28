@@ -246,6 +246,12 @@ export const Screen = () => {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     } else {
+      if (playingAudio) {
+        playingAudio.pause();
+        playingAudio.currentTime = 0;
+        setPlayingAudio(null);
+      }
+      
       chunksRef.current = [];
       if (!videoRef.current) return;
       const stream = videoRef.current.srcObject;
