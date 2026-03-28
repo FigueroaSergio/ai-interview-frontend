@@ -11,11 +11,13 @@ import { interviewMachine, Roles } from "./core/state";
 import { useFaceMeshDetector } from "./hooks/useFaceMeshDetector";
 import { useWhisperASR } from "./hooks/useWhisperASR";
 import { useEmotionClassifier } from "./hooks/useEmotionClassifier";
+import { AudioLines, AudioLinesIcon } from "lucide-react";
 const VIDEO_WIDTH = 640;
 const VIDEO_HEIGHT = 480;
 
 env.allowLocalModels = false;
 env.useBrowserCache = true;
+
 
 
 
@@ -32,6 +34,7 @@ export const Screen = () => {
   const [previewEmotion, setPreviewEmotion] = useState("");
   const [previewVideoUrl, setPreviewVideoUrl] = useState("");
   const [showCameraModal, setShowCameraModal] = useState(false);
+  const [playingAudio, setPlayingAudio] = useState<any>(null);
 
   console.log("Screen rendering");
 
@@ -219,8 +222,22 @@ export const Screen = () => {
     });
   };
 
-  const playAudio = async (audio) => {
-    await audio.play();
+  const playAudio = async (audio: any) => {
+    if (playingAudio && playingAudio !== audio) {
+      playingAudio.pause();
+      playingAudio.currentTime = 0;
+    }
+    
+    setPlayingAudio(audio);
+    
+    audio.onended = () => setPlayingAudio(null);
+    audio.onpause = () => setPlayingAudio(null);
+    
+    try {
+      await audio.play();
+    } catch(e) {
+      setPlayingAudio(null);
+    }
   };
 
   const toggleRecording = () => {
@@ -296,24 +313,24 @@ export const Screen = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-slate-900 text-white font-sans p-4 overflow-hidden">
+    <div className="flex flex-col h-screen bg-surface text-on-surface font-sans p-6 overflow-hidden">
       {/* Header */}
-      <div className="flex justify-between items-center mb-4 bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700">
-        <h1 className="text-xl font-bold flex items-center gap-3">
+      <div className="flex justify-between items-center mb-6 bg-surface-container-low p-4 px-6 rounded-2xl">
+        <h1 className="text-xl font-bold flex items-center gap-3 tracking-tight">
           <div
-            className={`w-3 h-3 rounded-full ${status === "Ready" ? "bg-green-500" : "bg-yellow-500"} animate-pulse`}
+            className={`w-3 h-3 rounded-full ${status === "Ready" ? "bg-green-500" : "bg-yellow-500"}`}
           />
           Edge AI Video Chat
         </h1>
-        <div className="px-3 py-1 bg-slate-700 rounded-full text-xs font-mono">
+        <div className="px-4 py-1.5 bg-surface-container-highest rounded-full text-xs font-medium text-on-surface-variant">
           {status}
         </div>
       </div>
 
-      <div className="flex flex-1 gap-4 overflow-hidden">
+      <div className="flex flex-1 gap-6 overflow-hidden">
         {/* Left: Video + Mesh overlay */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="relative flex-1 bg-black rounded-2xl overflow-hidden border border-slate-700 shadow-2xl">
+          <div className="relative flex-1 bg-surface-container rounded-[2rem] overflow-hidden shadow-[0_20px_50px_rgba(23,28,38,0.05)] border-none">
             {/* Video: CSS-mirrored, shows the live camera feed */}
             <video
               ref={videoRef}
@@ -333,32 +350,32 @@ export const Screen = () => {
             />
 
             {/* Emotion badge */}
-            <div className="absolute top-6 left-6">
-              <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10">
-                <span className="text-[10px] uppercase tracking-widest opacity-60 block">
+            <div className="absolute top-6 left-6 z-10">
+              <div className="bg-surface/80 backdrop-blur-md px-5 py-3 rounded-2xl">
+                <span className="text-[10px] uppercase tracking-wider font-bold text-on-surface-variant block mb-1">
                   Facial Analysis
                 </span>
-                <div className="text-2xl font-black text-cyan-400 drop-shadow-md">
+                <div className="text-2xl font-black text-primary">
                   {currentEmotion !== "None" ? currentEmotion : "Detecting..."}
                 </div>
               </div>
             </div>
 
             {/* Record button */}
-            <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
+            <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10">
               <button
                 onClick={toggleRecording}
                 disabled={isProcessing || status !== "Ready"}
                 className={`group relative w-20 h-20 rounded-full flex items-center justify-center transition-all active:scale-95 ${
                   isRecording
-                    ? "bg-red-500 shadow-[0_0_30px_rgba(239,68,68,0.5)]"
-                    : "bg-white hover:bg-cyan-50 shadow-xl"
+                    ? "bg-[#a8362a] shadow-[0_20px_50px_rgba(168,54,42,0.3)]"
+                    : "bg-surface-container-lowest hover:bg-surface-container-low shadow-[0_20px_50px_rgba(23,28,38,0.08)]"
                 } ${isProcessing ? "opacity-30 grayscale cursor-not-allowed" : ""}`}
               >
                 <div
-                  className={`transition-all duration-300 ${isRecording ? "w-8 h-8 bg-white rounded-lg" : "w-7 h-7 bg-red-500 rounded-full"}`}
+                  className={`transition-all duration-300 ${isRecording ? "w-8 h-8 bg-surface-container-lowest rounded-lg" : "w-7 h-7 bg-primary rounded-full"}`}
                 />
-                <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="absolute -top-12 left-1/2 -translate-x-1/2 bg-surface text-on-surface text-[10px] font-bold px-3 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-[0_10px_20px_rgba(23,28,38,0.05)]">
                   {isRecording ? "Stop Recording" : "Record & Analyze"}
                 </span>
               </button>
@@ -367,27 +384,27 @@ export const Screen = () => {
         </div>
 
         {/* Right: Chat */}
-        <div className="flex-1 flex flex-col bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
-          <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex items-center justify-between">
-            <span className="font-bold text-slate-400 text-sm">
+        <div className="flex-1 flex flex-col bg-surface-container-low rounded-[2rem] overflow-hidden">
+          <div className="p-6 bg-surface-container flex items-center justify-between border-b-none">
+            <span className="font-bold text-on-surface text-sm">
               Session History
             </span>
-            <div className="text-[10px] bg-cyan-900/50 text-cyan-300 px-2 py-1 rounded uppercase tracking-tighter">
+            <div className="text-[10px] bg-primary/10 text-primary px-3 py-1.5 rounded-full uppercase tracking-wider font-bold">
               On-Device Processing
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900/20">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {state.context.transcript.map((m, idx) => (
               <div
                 key={idx}
                 className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[90%] p-4 rounded-2xl text-sm shadow-sm ${
+                  className={`max-w-[85%] p-5 rounded-3xl text-sm font-medium ${
                     m.role === "user"
-                      ? "bg-cyan-700 text-white rounded-tr-none border border-cyan-600/50"
-                      : "bg-slate-700 text-slate-100 rounded-tl-none border border-slate-600"
+                      ? "bg-gradient-to-br from-primary to-primary-container text-white rounded-tr-sm shadow-[0_10px_20px_rgba(97,61,222,0.15)]"
+                      : "bg-surface-container-lowest text-on-surface rounded-tl-sm shadow-[0_10px_30px_rgba(23,28,38,0.05)]"
                   }`}
                 >
                   {m.content}
@@ -396,17 +413,19 @@ export const Screen = () => {
                     <video
                       src={m.videoUrl}
                       controls
-                      className="mt-2 w-full max-w-xs rounded-lg mirrored-video"
+                      className="mt-4 w-full max-w-xs rounded-xl mirrored-video drop-shadow-sm"
                     />
-
                   )}
-
+                  <br />
                   {m.audio && (
                     <button
                       onClick={() => playAudio(m.audio)}
-                      className="mt-2 px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded"
+                      className="mt-4 px-4 py-2 bg-surface-container-highest hover:bg-surface-container text-on-surface font-semibold text-xs rounded-xl transition-colors"
                     >
-                      🔊 Play
+                      <span className="flex items-center gap-2">
+                        <AudioLines className={playingAudio === m.audio ? "animate-pulse text-primary" : ""} /> 
+                        {playingAudio === m.audio ? "Playing..." : "Play Audio"}
+                      </span>
                     </button>
                   )}
                 </div>
@@ -416,16 +435,16 @@ export const Screen = () => {
               state.matches({ interviewing: "aiThinking" }) ||
               state.matches("evaluating")) && (
               <div className="flex justify-start animate-in">
-                <div className="bg-slate-700 text-slate-200 max-w-xs lg:max-w-md px-4 py-2 rounded-lg">
-                  <div className="flex items-center space-x-2">
+                <div className="bg-surface-container-lowest text-on-surface max-w-xs lg:max-w-md px-5 py-4 rounded-3xl rounded-tl-sm shadow-[0_10px_30px_rgba(23,28,38,0.05)]">
+                  <div className="flex items-center space-x-3 font-medium text-sm">
                     <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"></div>
                       <div
-                        className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"
+                        className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"
                         style={{ animationDelay: "0.1s" }}
                       ></div>
                       <div
-                        className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"
+                        className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"
                         style={{ animationDelay: "0.2s" }}
                       ></div>
                     </div>
@@ -436,12 +455,12 @@ export const Screen = () => {
             )}
             {isProcessing && (
               <div className="flex justify-start">
-                <div className="bg-slate-800/80 p-4 rounded-2xl rounded-tl-none text-xs text-slate-400 flex items-center gap-3">
-                  <div className="flex gap-1">
+                <div className="bg-surface-container-highest p-5 rounded-3xl rounded-tl-sm text-sm font-medium text-on-surface flex items-center gap-3 shadow-[0_10px_30px_rgba(23,28,38,0.05)]">
+                  <div className="flex gap-1.5">
                     {[0, 0.2, 0.4].map((d, i) => (
                       <div
                         key={i}
-                        className="w-1.5 h-1.5 bg-cyan-500 rounded-full animate-bounce"
+                        className="w-2 h-2 bg-primary rounded-full animate-bounce"
                         style={{ animationDelay: `${d}s` }}
                       />
                     ))}
@@ -453,9 +472,8 @@ export const Screen = () => {
             <div ref={chatEndRef} />
           </div>
 
-
-          <div className="p-4 bg-slate-900/50 border-t border-slate-700">
-            <div className="text-[10px] text-slate-500 uppercase font-semibold text-center leading-relaxed">
+          <div className="p-4 bg-surface-container">
+            <div className="text-[10px] text-on-surface-variant uppercase font-bold text-center leading-relaxed tracking-wider">
               No data leaves this browser.
               <br />
               MediaPipe Face Mesh + Transformers.js (Whisper)

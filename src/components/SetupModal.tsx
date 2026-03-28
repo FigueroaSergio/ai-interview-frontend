@@ -8,34 +8,34 @@ export const SetupModal = () => {
   const [questionQuantity, setQuestionQuantity] = useState(5);
 
   return (
-    <div className="flex flex-col h-screen bg-slate-900 justify-center items-center z-50">
-      <div className="bg-white p-8 rounded-lg text-black max-w-md w-full shadow-2xl">
-        <h2 className="text-2xl mb-4 font-bold">Setup Your Interview</h2>
-        <div className="mb-4">
-          <label className="block text-sm font-bold mb-2">Your Name:</label>
+    <div className="flex flex-col h-screen bg-surface justify-center items-center z-50 p-6">
+      <div className="bg-surface-container-lowest p-10 rounded-[1.5rem] w-full max-w-md shadow-[0_20px_50px_rgba(23,28,38,0.05)]">
+        <h2 className="text-[2rem] leading-tight font-medium mb-8 text-on-surface tracking-tight">Setup Interview</h2>
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-2 text-on-surface-variant">Your Name:</label>
           <input
             type="text"
             value={userName}
             onChange={(e) => setUserName(e.target.value)}
-            className="w-full p-2 border rounded bg-gray-100 text-black"
+            className="w-full p-4 rounded-xl bg-surface-container-low text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-[3px] focus:ring-primary/20 transition-all font-medium border-none outline-none"
           />
         </div>
-        <div className="mb-4">
-          <label className="block text-sm font-bold mb-2">
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-2 text-on-surface-variant">
             Difficulty Level:
           </label>
           <select
             value={difficulty}
             onChange={(e) => setDifficulty(e.target.value)}
-            className="w-full p-2 border rounded bg-gray-100 text-black"
+            className="w-full p-4 rounded-xl bg-surface-container-low text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-[3px] focus:ring-primary/20 transition-all font-medium border-none outline-none appearance-none"
           >
             <option value="easy">Easy</option>
             <option value="medium">Medium</option>
             <option value="hard">Hard</option>
           </select>
         </div>
-        <div className="mb-4">
-          <label className="block text-sm font-bold mb-2">
+        <div className="mb-8">
+          <label className="block text-sm font-medium mb-2 text-on-surface-variant">
             Number of Questions:
           </label>
           <input
@@ -44,7 +44,7 @@ export const SetupModal = () => {
             max="10"
             value={questionQuantity}
             onChange={(e) => setQuestionQuantity(Number(e.target.value))}
-            className="w-full p-2 border rounded bg-gray-100 text-black"
+            className="w-full p-4 rounded-xl bg-surface-container-low text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-[3px] focus:ring-primary/20 transition-all font-medium border-none outline-none"
           />
         </div>
         <button
@@ -61,7 +61,7 @@ export const SetupModal = () => {
               }
             });
           }}
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full"
+          className="w-full bg-gradient-to-br from-primary to-primary-container hover:opacity-90 text-white font-medium text-sm py-4 px-6 rounded-xl shadow-[0_20px_50px_rgba(23,28,38,0.05)] transition-all hover:-translate-y-0.5"
         >
           Start Interview
         </button>
