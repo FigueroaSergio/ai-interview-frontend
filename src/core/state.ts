@@ -5,7 +5,7 @@ import {
   getIntakeAI,
   getInterviewQuestion,
 } from "./ai";
-export const Roles = { Ai: "ai", User: "user" };
+export const Roles = { Ai: "assistant", User: "user" };
 
 export type Roles = (typeof Roles)[keyof typeof Roles];
 export type Transcript = {

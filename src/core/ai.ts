@@ -1,48 +1,67 @@
-import { GoogleGenAI } from "@google/genai";
-import type { ContextInterview, Transcript } from "./state";
+import { Roles, type ContextInterview, type Transcript } from "./state";
+import { Chat } from "./chat";
+const API_BASE_URL = import.meta.env.VITE_CHAT_API;
 
-const ai = new GoogleGenAI({
-  apiKey: import.meta.env.VITE_GOOGLE_API_KEY ?? "",
-});
-const model = "gemma-3-27b-it";
+export const generateVoice = async (text: string) => {
+  if (!text) return;
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/audio`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text }),
+    });
+
+    if (!response.ok) throw new Error("Generation failed");
+
+    // 1. Convert response stream to a Blob
+    const blob = await response.blob();
+
+    // 2. Create a "Temporal" URL for the blob
+    const audioUrl = URL.createObjectURL(blob);
+
+    return new Audio(audioUrl);
+  } catch (error) {
+    console.error("Error generating audio:", error);
+  }
+  return null;
+};
 export async function getInterviewQuestion(stateContext: ContextInterview) {
   // Construct the "Brain" prompt using the XState Context
   const systemInstruction = `
     You are an expert interviewer. 
     Role: ${stateContext.role}
     Rule: Ask ONE concise question. Stay in character.
+    Don't not add ani emoji or markdown to your answer
+
   `;
   // Candidate Resume: ${stateContext.resume}
 
   console.log("QUESTION");
-  const history = stateContext.transcript.map((msg) => ({
-    role: msg.role === "ai" ? "model" : "user",
-    parts: [{ text: msg.content }],
-  }));
-  history.push({ role: "model", parts: [{ text: systemInstruction }] });
-  const chat = await ai.chats.create({
-    model,
-    history,
-  });
+  const history = stateContext.transcript;
+  history.push({ role: Roles.User, content: "Next question please." });
 
-  const result = await chat.sendMessage({ message: "Next question please." });
-  return result.text ?? "";
+  const result = await Chat(history, systemInstruction);
+  return result ?? "";
 }
-export async function getIntakeAI(transcript: Transcript[]) {
+export async function getIntakeAI(stateContext: ContextInterview) {
   // 2. Their Resume or a summary of their experience.
-
-  const prompt = `
+  const transcript = stateContext.transcript;
+  const systemInstruction = `
     You are an AI Intake Assistant. Your job is to politely ask the user for:
     1. The Job Description or Role they are interviewing for.
     
     If they haven't provided one of these, ask for it nicely and shorter. 
     If they provide both, acknowledge it and say you are ready to start.
-    Current Transcript: ${JSON.stringify(transcript)}
+    Don't not add ani emoji or markdown to your answer
+    ${transcript.length > 0 ? `Current Transcript: ${JSON.stringify(transcript)}` : ""}
   `;
   console.log("INTAKE");
+  const history = stateContext.transcript;
 
-  const result = await ai.models.generateContent({ model, contents: prompt });
-  return result.text ?? "";
+  const result = await Chat(history, systemInstruction);
+
+  return result ?? "";
 }
 
 export async function checkCompleteness(transcript: Transcript[]) {
@@ -65,33 +84,23 @@ Transcript: ${JSON.stringify(transcript)}
   `;
   console.log("CHECK");
 
-  const result = await ai.models.generateContent({
-    model,
-    contents: checkPrompt,
-  });
+  const result = await Chat([], checkPrompt);
   function cleanJsonResponse(rawString: string) {
     return rawString.replace(/```json|```/g, "").trim();
   }
 
-  return JSON.parse(cleanJsonResponse(result.text ?? ""));
+  return JSON.parse(cleanJsonResponse(result ?? ""));
 }
 
 export async function getFinalEvaluation(context: ContextInterview) {
-  const prompt = `
-    Act as a Lead Interviewer. 
-    Evaluate the candidate for the role: ${context.role}.
-    Resume Context: ${context.resume}
-    
-    Transcript: ${JSON.stringify(context.transcript)}
-    
-    Provide a score (0-100), key strengths, and specific feedback on how to improve 
-    their technical depth in the answers provided.
-  `;
-  console.log("EVALUATION");
+  const systemInstruction = `Act as a Lead Interviewer. Evaluate the candidate for the role: ${context.role}.`;
 
-  const result = await ai.models.generateContent({
-    model,
-    contents: prompt,
-  });
-  return result.text ?? "";
+  const messages = [
+    {
+      role: "user",
+      content: `Resume: ${context.resume}\n\nTranscript: ${JSON.stringify(context.transcript)}`,
+    },
+  ];
+  const result = await Chat(messages, systemInstruction);
+  return result ?? "";
 }

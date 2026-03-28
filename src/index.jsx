@@ -6,7 +6,8 @@ import * as tf from "@tensorflow/tfjs";
 import { pipeline, env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
 import { useMachine } from "@xstate/react";
-import { interviewMachine } from "./core/state";
+import { interviewMachine, Roles } from "./core/state";
+import { generateVoice } from "./core/ai";
 const EMOTIONS = ["Neutral", "Happy", "Sad", "Angry", "Surprised"];
 const VIDEO_WIDTH = 640;
 const VIDEO_HEIGHT = 480;
@@ -238,6 +239,27 @@ export const Screen = () => {
       setCameraStarted(true);
     }
   }, [status, cameraStarted]);
+  useEffect(() => {
+    let init = async () => {
+      console.log("ENTER");
+
+      const transcript = state.context.transcript;
+      let lastIndex = transcript.length - 1;
+      if (!transcript[lastIndex]) {
+        return;
+      }
+      if (transcript[lastIndex].role == Roles.User) {
+        return;
+      }
+      console.log("LAST AI");
+
+      const audio = await generateVoice(transcript[lastIndex].content);
+      if (audio) {
+        playAudio(audio);
+      }
+    };
+    init();
+  }, [state.context.transcript]);
 
   const startCamera = async () => {
     try {
@@ -377,13 +399,7 @@ export const Screen = () => {
     }
   };
 
-  const playAudio = async (audioData) => {
-    // 1. Crea un Blob dai dati audio generati
-    const blob = audioData.toBlob();
-
-    // 2. Genera un URL per il Blob e riproduci
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+  const playAudio = async (audio) => {
     await audio.play();
   };
 
@@ -393,10 +409,11 @@ export const Screen = () => {
       ...prev,
       { id, role: "bot", text, audioData: null, sampleRate: null },
     ]);
-
+    generateAndPlay(text);
     if (!tts || ttsStatus !== "ready") {
       return;
     }
+
     if (true) return;
 
     try {
