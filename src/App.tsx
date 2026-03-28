@@ -1,4 +1,4 @@
-import { Screen } from "./index.jsx";
+import { Screen } from "./index";
 
 import "./App.css";
 

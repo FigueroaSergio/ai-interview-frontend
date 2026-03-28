@@ -1,17 +1,16 @@
-import React, { useState, useRef, useEffect } from "react";
-import * as faceLandmarksDetection from "@tensorflow-models/face-landmarks-detection";
+import { useState, useRef, useEffect } from "react";
 import "@tensorflow/tfjs-backend-webgl";
 import "@tensorflow/tfjs-core";
-import * as tf from "@tensorflow/tfjs";
-import { pipeline, env } from "@huggingface/transformers";
-import { KokoroTTS } from "kokoro-js";
+import { env } from "@huggingface/transformers";
+
 import { useMachine } from "@xstate/react";
 import { interviewMachine, Roles } from "./core/state";
 import { generateVoice } from "./core/ai";
-const EMOTIONS = ["Neutral", "Happy", "Sad", "Angry", "Surprised"];
+import { useFaceMeshDetector } from "./hooks/useFaceMeshDetector";
+import { useWhisperASR } from "./hooks/useWhisperASR";
+import { useEmotionClassifier } from "./hooks/useEmotionClassifier";
 const VIDEO_WIDTH = 640;
 const VIDEO_HEIGHT = 480;
-const KOKORO_MODEL_ID = "onnx-community/Kokoro-82M-ONNX";
 
 env.allowLocalModels = false;
 env.useBrowserCache = true;
@@ -20,159 +19,6 @@ const generateMessageId = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random()}`;
-
-const useFaceMeshDetector = () => {
-  const [detector, setDetector] = useState(null);
-  const [status, setStatus] = useState("loading");
-
-  useEffect(() => {
-    let alive = true;
-
-    const init = async () => {
-      try {
-        await tf.ready();
-        await tf.setBackend("webgl");
-
-        const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-        const created = await faceLandmarksDetection.createDetector(model, {
-          runtime: "tfjs",
-          modelType: "short",
-          maxFaces: 1,
-          refineLandmarks: true,
-          solutionPath: "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh",
-          detectorModelConfig: { maxFaces: 1, scoreThreshold: 0.3 },
-        });
-
-        if (!alive) return;
-        setDetector(created);
-        setStatus("ready");
-      } catch (err) {
-        console.error("Face mesh load failed", err);
-        if (alive) setStatus("error");
-      }
-    };
-
-    init();
-    return () => {
-      alive = false;
-      if (detector && detector.dispose) detector.dispose();
-    };
-  }, []);
-
-  return { detector, status };
-};
-
-const useWhisperASR = () => {
-  const [whisperPipeline, setWhisperPipeline] = useState(null);
-  const [status, setStatus] = useState("loading");
-
-  useEffect(() => {
-    let alive = true;
-
-    const init = async () => {
-      try {
-        const pipe = await pipeline(
-          "automatic-speech-recognition",
-          "Xenova/whisper-tiny.en",
-          { dtype: "q4" },
-        );
-
-        if (!alive) return;
-        setWhisperPipeline(() => pipe);
-        setStatus("ready");
-      } catch (err) {
-        console.error("Whisper load failed", err);
-        if (alive) setStatus("error");
-      }
-    };
-
-    init();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  return { whisperPipeline, status };
-};
-
-const useEmotionClassifier = () => {
-  const [classifier, setClassifier] = useState(null);
-  const [status, setStatus] = useState("loading");
-
-  useEffect(() => {
-    let alive = true;
-
-    const init = () => {
-      try {
-        const nn = tf.sequential();
-        nn.add(
-          tf.layers.dense({
-            units: 64,
-            activation: "relu",
-            inputShape: [1434],
-          }),
-        );
-        nn.add(tf.layers.dropout({ rate: 0.2 }));
-        nn.add(tf.layers.dense({ units: 32, activation: "relu" }));
-        nn.add(
-          tf.layers.dense({ units: EMOTIONS.length, activation: "softmax" }),
-        );
-
-        nn.compile({
-          optimizer: "adam",
-          loss: "categoricalCrossentropy",
-          metrics: ["accuracy"],
-        });
-
-        if (alive) {
-          setClassifier(nn);
-          setStatus("ready");
-        }
-      } catch (err) {
-        console.error("Classifier init failed", err);
-        if (alive) setStatus("error");
-      }
-    };
-
-    init();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  return { classifier, status };
-};
-
-const useKokoroTTS = () => {
-  const [tts, setTts] = useState(null);
-  const [status, setStatus] = useState("loading");
-
-  useEffect(() => {
-    let alive = true;
-
-    const init = async () => {
-      try {
-        const model = await KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
-          dtype: "q4",
-        });
-
-        if (!alive) return;
-        setTts(model);
-        setStatus("ready");
-      } catch (err) {
-        console.error("Kokoro TTS load failed", err);
-        if (alive) setStatus("error");
-      }
-    };
-
-    init();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  return { tts, status };
-};
 
 export const Screen = () => {
   const [status, setStatus] = useState("Initializing models...");
@@ -188,16 +34,16 @@ export const Screen = () => {
   const [currentEmotion, setCurrentEmotion] = useState("None");
   const [cameraStarted, setCameraStarted] = useState(false);
 
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const offscreenRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const offscreenRef = useRef<HTMLCanvasElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef([]);
 
   const { detector, status: faceStatus } = useFaceMeshDetector();
   const { whisperPipeline, status: whisperStatus } = useWhisperASR();
-  const { classifier, status: classifierStatus } = useEmotionClassifier();
-  const { tts, status: ttsStatus } = useKokoroTTS();
+  const { status: classifierStatus, predictEmotion } =
+    useEmotionClassifier(setCurrentEmotion);
 
   const emotionRef = useRef("None");
 
@@ -214,24 +60,20 @@ export const Screen = () => {
   const [state, send] = useMachine(interviewMachine);
 
   useEffect(() => {
-    if (
-      [faceStatus, whisperStatus, classifierStatus, ttsStatus].includes("error")
-    ) {
+    if ([faceStatus, whisperStatus, classifierStatus].includes("error")) {
       setStatus("Error loading models. Check console.");
       return;
     }
 
     if (
-      [faceStatus, whisperStatus, classifierStatus, ttsStatus].every(
-        (s) => s === "ready",
-      )
+      [faceStatus, whisperStatus, classifierStatus].every((s) => s === "ready")
     ) {
       setStatus("Ready");
       return;
     }
 
     setStatus("Initializing models...");
-  }, [faceStatus, whisperStatus, classifierStatus, ttsStatus]);
+  }, [faceStatus, whisperStatus, classifierStatus]);
 
   useEffect(() => {
     if (status === "Ready" && !cameraStarted) {
@@ -240,11 +82,11 @@ export const Screen = () => {
     }
   }, [status, cameraStarted]);
   useEffect(() => {
-    let init = async () => {
+    const init = async () => {
       console.log("ENTER");
 
       const transcript = state.context.transcript;
-      let lastIndex = transcript.length - 1;
+      const lastIndex = transcript.length - 1;
       if (!transcript[lastIndex]) {
         return;
       }
@@ -267,13 +109,15 @@ export const Screen = () => {
         video: { width: VIDEO_WIDTH, height: VIDEO_HEIGHT },
         audio: true,
       });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current.play();
-          requestAnimationFrame(processFrame);
-        };
+      if (!videoRef.current) {
+        return;
       }
+      videoRef.current.srcObject = stream;
+      videoRef.current.onloadedmetadata = () => {
+        if (!videoRef.current) return;
+        videoRef.current.play();
+        requestAnimationFrame(processFrame);
+      };
     } catch (e) {
       console.error("Camera access denied", e);
       setStatus("Camera access denied");
@@ -297,14 +141,16 @@ export const Screen = () => {
     }
 
     const offCtx = offscreen.getContext("2d");
+    if (!offCtx) return;
     offCtx.drawImage(video, 0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
     const faces = await detector.estimateFaces(offscreen, {
       flipHorizontal: false,
     });
 
-    let draw = false;
+    const draw = false;
     if (draw) {
       const ctx = canvas.getContext("2d");
+      if (!ctx) return;
       ctx.clearRect(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
     }
 
@@ -316,6 +162,7 @@ export const Screen = () => {
         x: VIDEO_WIDTH - k.x,
       }));
       if (draw) {
+        if (!ctx) return;
         drawMesh(ctx, mirroredKeypoints);
       }
       const features = face.keypoints.flatMap((k) => [
@@ -324,7 +171,7 @@ export const Screen = () => {
         (k.z || 0) / 100,
       ]);
 
-      predictEmotion(features, classifier);
+      predictEmotion(features);
     }
 
     requestAnimationFrame(processFrame);
@@ -342,62 +189,6 @@ export const Screen = () => {
       ctx.fill();
     });
   };
-  const predictEmotion = (features, classifierModel) => {
-    // Validate inputs to prevent runtime errors
-    if (!classifierModel) {
-      console.warn("Emotion classifier model is not loaded yet");
-      return;
-    }
-
-    if (!Array.isArray(features) || features.length !== 1434) {
-      console.warn(
-        `Invalid features array: expected 1434 elements, got ${
-          features?.length ?? "undefined"
-        }`,
-      );
-      return;
-    }
-
-    // Check for invalid numbers in features
-    const hasInvalidValues = features.some(
-      (f) => typeof f !== "number" || isNaN(f) || !isFinite(f),
-    );
-    if (hasInvalidValues) {
-      console.warn("Features contain invalid or non-finite values");
-      return;
-    }
-
-    try {
-      // Use tf.tidy to automatically clean up tensors and prevent memory leaks
-      tf.tidy(() => {
-        // Convert features to tensor with shape [1, 1434] (batch size 1)
-        const inputTensor = tf.tensor2d([features], [1, 1434]);
-
-        // Run inference
-        const predictionTensor = classifierModel.predict(inputTensor);
-
-        // Get the index of the highest probability class
-        const predictedIndex = predictionTensor.argMax(1).dataSync()[0];
-
-        // Validate the predicted index is within the emotions array bounds
-        if (
-          Number.isInteger(predictedIndex) &&
-          predictedIndex >= 0 &&
-          predictedIndex < EMOTIONS.length
-        ) {
-          const detectedEmotion = EMOTIONS[predictedIndex];
-          setCurrentEmotion(detectedEmotion);
-        } else {
-          console.warn(
-            `Prediction returned invalid index: ${predictedIndex}. Expected 0-${EMOTIONS.length - 1}`,
-          );
-        }
-      });
-    } catch (error) {
-      console.error("Error during emotion prediction:", error);
-      // Optionally set to a default state or keep current
-    }
-  };
 
   const playAudio = async (audio) => {
     await audio.play();
@@ -410,39 +201,16 @@ export const Screen = () => {
       { id, role: "bot", text, audioData: null, sampleRate: null },
     ]);
     generateAndPlay(text);
-    if (!tts || ttsStatus !== "ready") {
-      return;
-    }
-
-    if (true) return;
-
-    try {
-      const result = await tts.generate(text, { voice: "af_bella" });
-      if (result && result.audio && result.sampling_rate) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === id
-              ? {
-                  ...m,
-                  audioData: result,
-                }
-              : m,
-          ),
-        );
-        // Auto-play for bot messages
-        playAudio(result);
-      }
-    } catch (err) {
-      console.error("TTS generation failed", err);
-    }
   };
 
   const toggleRecording = () => {
     if (isRecording) {
+      if (!mediaRecorderRef.current) return;
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     } else {
       chunksRef.current = [];
+      if (!videoRef.current) return;
       const stream = videoRef.current.srcObject;
       const recorder = new MediaRecorder(stream);
       recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
@@ -459,9 +227,7 @@ export const Screen = () => {
     const blob = new Blob(chunksRef.current, { type: "video/webm" });
 
     try {
-      const audioContext = new (
-        window.AudioContext || window.webkitAudioContext
-      )({ sampleRate: 16000 });
+      const audioContext = new window.AudioContext({ sampleRate: 16000 });
       const arrayBuffer = await blob.arrayBuffer();
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
       const offlineAudio = audioBuffer.getChannelData(0);
