@@ -5,7 +5,6 @@ import { env } from "@huggingface/transformers";
 
 import { useMachine } from "@xstate/react";
 import { interviewMachine, Roles } from "./core/state";
-import { generateVoice } from "./core/ai";
 import { useFaceMeshDetector } from "./hooks/useFaceMeshDetector";
 import { useWhisperASR } from "./hooks/useWhisperASR";
 import { useEmotionClassifier } from "./hooks/useEmotionClassifier";
@@ -22,17 +21,26 @@ const generateMessageId = () =>
 
 export const Screen = () => {
   const [status, setStatus] = useState("Initializing models...");
-  const [messages, setMessages] = useState([
-    {
-      id: generateMessageId(),
-      role: "bot",
-      text: "Hello! Record a video to see the AI magic.",
-    },
-  ]);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentEmotion, setCurrentEmotion] = useState("None");
   const [cameraStarted, setCameraStarted] = useState(false);
+  const [showLanding, setShowLanding] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [difficulty, setDifficulty] = useState("medium");
+  const [questionQuantity, setQuestionQuantity] = useState(5);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewText, setPreviewText] = useState("");
+  const [previewEmotion, setPreviewEmotion] = useState("");
+  const [previewVideoUrl, setPreviewVideoUrl] = useState("");
+
+  console.log(
+    "Screen rendering, showLanding:",
+    showLanding,
+    "showModal:",
+    showModal,
+  );
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -90,14 +98,13 @@ export const Screen = () => {
       if (!transcript[lastIndex]) {
         return;
       }
-      if (transcript[lastIndex].role == Roles.User) {
+      if (transcript[lastIndex].role === Roles.User) {
         return;
       }
       console.log("LAST AI");
 
-      const audio = await generateVoice(transcript[lastIndex].content);
-      if (audio) {
-        playAudio(audio);
+      if (transcript[lastIndex].audio) {
+        playAudio(transcript[lastIndex].audio);
       }
     };
     init();
@@ -109,9 +116,7 @@ export const Screen = () => {
         video: { width: VIDEO_WIDTH, height: VIDEO_HEIGHT },
         audio: true,
       });
-      if (!videoRef.current) {
-        return;
-      }
+
       videoRef.current.srcObject = stream;
       videoRef.current.onloadedmetadata = () => {
         if (!videoRef.current) return;
@@ -162,6 +167,7 @@ export const Screen = () => {
         x: VIDEO_WIDTH - k.x,
       }));
       if (draw) {
+        const ctx = canvas.getContext("2d");
         if (!ctx) return;
         drawMesh(ctx, mirroredKeypoints);
       }
@@ -192,15 +198,6 @@ export const Screen = () => {
 
   const playAudio = async (audio) => {
     await audio.play();
-  };
-
-  const appendBotMessage = async (text) => {
-    const id = generateMessageId();
-    setMessages((prev) => [
-      ...prev,
-      { id, role: "bot", text, audioData: null, sampleRate: null },
-    ]);
-    generateAndPlay(text);
   };
 
   const toggleRecording = () => {
@@ -242,20 +239,11 @@ export const Screen = () => {
 
       const emotion = emotionRef.current;
       const videoUrl = URL.createObjectURL(blob);
-      send({ type: "SUBMIT", payload: text });
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: generateMessageId(),
-          role: "user",
-          text: `[Recording]: "${text}" (Detected: ${emotion})`,
-          videoUrl,
-        },
-      ]);
 
-      await appendBotMessage(
-        `I heard you say: "${text}". You look like you're feeling ${emotion.toLowerCase()} right now.`,
-      );
+      setPreviewText(text);
+      setPreviewEmotion(emotion);
+      setPreviewVideoUrl(videoUrl);
+      setShowPreview(true);
     } catch (err) {
       console.error("Processing failed", err);
       setStatus("Processing failed.");
@@ -264,6 +252,109 @@ export const Screen = () => {
       setStatus("Ready");
     }
   };
+
+  const handleSend = () => {
+    send({ type: "SUBMIT", payload: previewText, videoUrl: previewVideoUrl });
+    setShowPreview(false);
+    setPreviewText("");
+    setPreviewEmotion("");
+    setPreviewVideoUrl("");
+  };
+
+  const handleReRecord = () => {
+    setShowPreview(false);
+    setPreviewText("");
+    setPreviewEmotion("");
+    setPreviewVideoUrl("");
+  };
+
+  if (showLanding) {
+    return (
+      <div className="flex flex-col h-screen bg-slate-900 text-white justify-center items-center">
+        <h1 className="text-4xl font-bold mb-8">AI Interview Assistant</h1>
+        <p className="text-lg mb-8 text-center">
+          Prepare for your next interview with AI-powered practice.
+          <br />
+          Face detection, emotion analysis, and voice transcription.
+        </p>
+        <button
+          onClick={() => {
+            console.log("Start Interview clicked");
+            setShowLanding(false);
+            setShowModal(true);
+          }}
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        >
+          Start Interview
+        </button>
+      </div>
+    );
+  }
+
+  if (showModal) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+        <div className="bg-white p-8 rounded-lg text-black max-w-md">
+          <h2 className="text-2xl mb-4">Setup Your Interview</h2>
+          <div className="mb-4">
+            <label className="block text-sm font-bold mb-2">Your Name:</label>
+            <input
+              type="text"
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
+              className="w-full p-2 border rounded bg-gray-100 text-black"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-bold mb-2">
+              Difficulty Level:
+            </label>
+            <select
+              value={difficulty}
+              onChange={(e) => setDifficulty(e.target.value)}
+              className="w-full p-2 border rounded bg-gray-100 text-black"
+            >
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-bold mb-2">
+              Number of Questions:
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="10"
+              value={questionQuantity}
+              onChange={(e) => setQuestionQuantity(e.target.value)}
+              className="w-full p-2 border rounded bg-gray-100 text-black"
+            />
+          </div>
+          <button
+            onClick={() => {
+              console.log("Submit setup clicked");
+              if (!userName.trim()) {
+                alert("Please enter your name");
+                return;
+              }
+              send({
+                type: "SUBMIT_SETUP",
+                name: userName,
+                difficulty,
+                quantity: parseInt(questionQuantity),
+              });
+              setShowModal(false);
+            }}
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full"
+          >
+            Start Interview
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-white font-sans p-4 overflow-hidden">
@@ -367,13 +458,12 @@ export const Screen = () => {
                       src={m.videoUrl}
                       controls
                       className="mt-2 w-full max-w-xs rounded-lg"
-                      muted
                     />
                   )}
 
-                  {m.audioData && (
+                  {m.audio && (
                     <button
-                      onClick={() => playAudio(m.audioData)}
+                      onClick={() => playAudio(m.audio)}
                       className="mt-2 px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded"
                     >
                       🔊 Play
@@ -382,6 +472,28 @@ export const Screen = () => {
                 </div>
               </div>
             ))}
+            {(state.matches({ gatheringInfo: "aiAsking" }) ||
+              state.matches({ interviewing: "aiThinking" }) ||
+              state.matches("evaluating")) && (
+              <div className="flex justify-start animate-in">
+                <div className="bg-slate-700 text-slate-200 max-w-xs lg:max-w-md px-4 py-2 rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
+                      <div
+                        className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.1s" }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.2s" }}
+                      ></div>
+                    </div>
+                    <span>AI is thinking...</span>
+                  </div>
+                </div>
+              </div>
+            )}
             {isProcessing && (
               <div className="flex justify-start">
                 <div className="bg-slate-800/80 p-4 rounded-2xl rounded-tl-none text-xs text-slate-400 flex items-center gap-3">
@@ -409,6 +521,41 @@ export const Screen = () => {
           </div>
         </div>
       </div>
+
+      {showPreview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+          <div className="bg-white p-8 rounded-lg text-black max-w-md">
+            <h2 className="text-2xl mb-4">Review Your Recording</h2>
+            <p className="mb-2">
+              <strong>Transcription:</strong> "{previewText}"
+            </p>
+            <p className="mb-4">
+              <strong>Emotion:</strong> {previewEmotion}
+            </p>
+            {previewVideoUrl && (
+              <video
+                src={previewVideoUrl}
+                controls
+                className="w-full mb-4 rounded"
+              />
+            )}
+            <div className="flex gap-4">
+              <button
+                onClick={handleReRecord}
+                className="bg-red-500 hover:bg-red-700 text-white py-2 px-4 rounded"
+              >
+                Re-record
+              </button>
+              <button
+                onClick={handleSend}
+                className="bg-green-500 hover:bg-green-700 text-white py-2 px-4 rounded"
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes slide-in {

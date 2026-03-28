@@ -38,11 +38,13 @@ export async function getInterviewQuestion(stateContext: ContextInterview) {
   // Candidate Resume: ${stateContext.resume}
 
   console.log("QUESTION");
-  const history = stateContext.transcript;
+  const history = [...stateContext.transcript];
   history.push({ role: Roles.User, content: "Next question please." });
 
   const result = await Chat(history, systemInstruction);
-  return result ?? "";
+  const text = result ?? "";
+  const audio = await generateVoice(text);
+  return { text, audio };
 }
 export async function getIntakeAI(stateContext: ContextInterview) {
   // 2. Their Resume or a summary of their experience.
@@ -60,8 +62,9 @@ export async function getIntakeAI(stateContext: ContextInterview) {
   const history = stateContext.transcript;
 
   const result = await Chat(history, systemInstruction);
-
-  return result ?? "";
+  const text = result ?? "";
+  const audio = await generateVoice(text);
+  return { text, audio };
 }
 
 export async function checkCompleteness(transcript: Transcript[]) {
@@ -102,5 +105,7 @@ export async function getFinalEvaluation(context: ContextInterview) {
     },
   ];
   const result = await Chat(messages, systemInstruction);
-  return result ?? "";
+  const text = result ?? "";
+  const audio = await generateVoice(text);
+  return { text, audio };
 }

@@ -11,9 +11,14 @@ export type Roles = (typeof Roles)[keyof typeof Roles];
 export type Transcript = {
   role: Roles;
   content: string;
+  audio?: HTMLAudioElement;
+  videoUrl?: string;
 };
 
 export type ContextInterview = {
+  name: string;
+  difficulty: string;
+  quantity: number;
   role: string;
   resume: string;
   transcript: Transcript[];
@@ -26,8 +31,11 @@ export type ContextInterview = {
 };
 export const interviewMachine = createMachine({
   id: "aiInterview",
-  initial: "gatheringInfo", // Start by talking to the user
+  initial: "setup", // Start with setup
   context: {
+    name: "",
+    difficulty: "",
+    quantity: 5,
     role: "",
     resume: "",
     transcript: [] as Transcript[],
@@ -39,6 +47,19 @@ export const interviewMachine = createMachine({
     retryingState: "", // Keep track of where we fell over
   } as ContextInterview,
   states: {
+    setup: {
+      on: {
+        SUBMIT_SETUP: {
+          target: "gatheringInfo",
+          actions: assign({
+            name: ({ event }) => event.name,
+            difficulty: ({ event }) => event.difficulty,
+            quantity: ({ event }) => event.quantity,
+            maxQuestions: ({ event }) => event.quantity,
+          }),
+        },
+      },
+    },
     gatheringInfo: {
       initial: "aiAsking",
       states: {
@@ -51,7 +72,7 @@ export const interviewMachine = createMachine({
               actions: assign({
                 transcript: ({ context, event }) => [
                   ...context.transcript,
-                  { role: Roles.Ai, content: event.output },
+                  { role: Roles.Ai, content: event.output.text, audio: event.output.audio },
                 ],
               }),
             },
@@ -71,7 +92,7 @@ export const interviewMachine = createMachine({
               actions: assign({
                 transcript: ({ context, event }) => [
                   ...context.transcript,
-                  { role: Roles.User, content: event.payload },
+                  { role: Roles.User, content: event.payload, videoUrl: event.videoUrl },
                 ],
               }),
             },
@@ -119,7 +140,7 @@ export const interviewMachine = createMachine({
               actions: assign({
                 transcript: ({ context, event }) => [
                   ...context.transcript,
-                  { role: "ai", content: event.output },
+                  { role: "ai", content: event.output.text, audio: event.output.audio },
                 ],
               }),
             },
@@ -143,7 +164,7 @@ export const interviewMachine = createMachine({
                   questionCount: ({ context }) => context.questionCount + 1,
                   transcript: ({ context, event }) => [
                     ...context.transcript,
-                    { role: "user", content: event.payload },
+                    { role: "user", content: event.payload, videoUrl: event.videoUrl },
                   ],
                 }),
               },
@@ -152,7 +173,7 @@ export const interviewMachine = createMachine({
                 actions: assign({
                   transcript: ({ context, event }) => [
                     ...context.transcript,
-                    { role: "user", content: event.payload },
+                    { role: "user", content: event.payload, videoUrl: event.videoUrl },
                   ],
                 }),
               },
@@ -167,7 +188,7 @@ export const interviewMachine = createMachine({
         input: ({ context }) => ({ context }),
         onDone: {
           target: "completed",
-          actions: assign({ evaluation: ({ event }) => event.output }),
+          actions: assign({ evaluation: ({ event }) => event.output.text }),
         },
         onError: {
           target: "#aiInterview.error",
