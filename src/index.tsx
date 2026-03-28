@@ -48,6 +48,8 @@ export const Screen = () => {
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef([]);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
 
   const { detector, status: faceStatus } = useFaceMeshDetector();
   const { whisperPipeline, status: whisperStatus } = useWhisperASR();
@@ -110,6 +112,15 @@ export const Screen = () => {
     };
     init();
   }, [state.context.transcript]);
+
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [state.context.transcript, isProcessing, state.value]);
+
 
   const startCamera = async () => {
     try {
@@ -466,8 +477,9 @@ export const Screen = () => {
                     <video
                       src={m.videoUrl}
                       controls
-                      className="mt-2 w-full max-w-xs rounded-lg"
+                      className="mt-2 w-full max-w-xs rounded-lg mirrored-video"
                     />
+
                   )}
 
                   {m.audio && (
@@ -519,7 +531,9 @@ export const Screen = () => {
                 </div>
               </div>
             )}
+            <div ref={chatEndRef} />
           </div>
+
 
           <div className="p-4 bg-slate-900/50 border-t border-slate-700">
             <div className="text-[10px] text-slate-500 uppercase font-semibold text-center leading-relaxed">
@@ -545,8 +559,9 @@ export const Screen = () => {
               <video
                 src={previewVideoUrl}
                 controls
-                className="w-full mb-4 rounded"
+                className="w-full mb-4 rounded mirrored-video"
               />
+
             )}
             <div className="flex gap-4">
               <button
@@ -596,6 +611,13 @@ export const Screen = () => {
           to   { opacity: 1; transform: translateY(0);    }
         }
         .animate-in { animation: slide-in 0.3s ease-out forwards; }
+        .mirrored-video {
+          transform: scaleX(-1);
+        }
+        /* Resets the controls so they aren't flipped */
+        .mirrored-video::-webkit-media-controls-panel {
+          transform: scaleX(-1);
+        }
       `}</style>
     </div>
   );
