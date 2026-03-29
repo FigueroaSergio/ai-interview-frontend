@@ -17,7 +17,8 @@ const VIDEO_WIDTH = 640;
 const VIDEO_HEIGHT = 480;
 
 env.allowLocalModels = false;
-env.useBrowserCache = true;
+// The caches API is only available in secure contexts (HTTPS/localhost).
+env.useBrowserCache = typeof caches !== 'undefined';
 
 
 
