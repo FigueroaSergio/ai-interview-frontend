@@ -1,4 +1,5 @@
 import { createMachine, assign, fromPromise } from "xstate";
+import { createActorContext } from "@xstate/react";
 import {
   checkCompleteness,
   getFinalEvaluation,
@@ -222,3 +223,5 @@ export const interviewMachine = createMachine({
     completed: { type: "final" },
   },
 });
+
+export const InterviewContext = createActorContext(interviewMachine);

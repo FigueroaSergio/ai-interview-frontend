@@ -1,9 +1,6 @@
 import React from 'react';
-import type { ContextInterview } from '../core/state';
-
-interface EvaluationModalProps {
-  evaluationContext: ContextInterview;
-}
+import { Navigate, useNavigate } from 'react-router-dom';
+import { InterviewContext } from '../core/state';
 
 interface EvaluationResult {
   overall_score: number;
@@ -13,28 +10,56 @@ interface EvaluationResult {
   improved_responses: { question: string; better_version: string }[];
 }
 
-export const EvaluationModal: React.FC<EvaluationModalProps> = ({ evaluationContext }) => {
+export const EvaluationModal: React.FC = () => {
+  const state = InterviewContext.useSelector((s) => s);
+  const send = InterviewContext.useActorRef().send;
+  const navigate = useNavigate();
+  const evaluationContext = state.context;
+
+  if (state.matches('setup')) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (state.matches('evaluating')) {
+    return (
+      <div className="flex flex-col h-screen bg-surface justify-center items-center p-6 text-center">
+        <h1 className="text-2xl font-bold text-on-surface mb-4">Generating Evaluation...</h1>
+        <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
+      </div>
+    );
+  }
+
   let parsedEvaluation: EvaluationResult | null = null;
   try {
-    parsedEvaluation = JSON.parse(evaluationContext.evaluation);
+    if (evaluationContext.evaluation) {
+      parsedEvaluation = JSON.parse(evaluationContext.evaluation);
+    }
   } catch(e) {
     console.warn("Could not parse evaluation", e);
   }
 
-  if (!parsedEvaluation) {
+  if (state.matches('error') || (!parsedEvaluation && state.matches('completed'))) {
     return (
       <div className="flex flex-col h-screen bg-surface justify-center items-center p-6 text-center">
-        <h1 className="text-2xl font-bold text-on-surface mb-4">Processing Error</h1>
-        <p className="text-on-surface-variant">We encountered an issue analyzing your interview results. Please try again later.</p>
-        <button className="mt-8 bg-surface-container-highest px-6 py-3 rounded-xl text-on-surface" onClick={() => window.location.reload()}>Return Home</button>
+        <h1 className="text-2xl font-bold text-[#a8362a] mb-4">Evaluation Error</h1>
+        <p className="text-on-surface-variant mb-6">{state.context.errorMessage || "We encountered an issue analyzing your interview results."}</p>
+        <div className="flex gap-4 mt-4">
+          <button className="bg-[#a8362a] px-6 py-3 rounded-xl text-white font-bold" onClick={() => send({ type: 'RETRY' })}>Retry Evaluation</button>
+          <button className="bg-surface-container-highest px-6 py-3 rounded-xl text-on-surface font-bold" onClick={() => navigate('/')}>Return Home</button>
+        </div>
       </div>
     );
+  }
+
+  if (!parsedEvaluation) {
+    // Should not reach here, but safety fallback
+    return <Navigate to="/" replace />;
   }
 
   const { overall_score, strengths, weaknesses, missed_opportunities, improved_responses } = parsedEvaluation;
 
   // Map improved_responses to original durationMs using context transcript
-  const userAnswers = evaluationContext.transcript.filter(t => t.role === 'user');
+  const userAnswers = evaluationContext.transcript.filter((t: any) => t.role === 'user');
 
   return (
     <div className="min-h-screen bg-surface font-sans text-on-surface p-6 md:p-12 overflow-y-auto">
@@ -110,7 +135,7 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({ evaluationCont
         </section>
 
         <div className="mt-16 text-center">
-          <button onClick={() => window.location.reload()} className="bg-gradient-to-br from-primary to-primary-container text-white px-8 py-4 rounded-xl font-bold shadow-lg hover:-translate-y-0.5 transition-transform">
+          <button onClick={() => navigate('/')} className="bg-gradient-to-br from-primary to-primary-container text-white px-8 py-4 rounded-xl font-bold shadow-lg hover:-translate-y-0.5 transition-transform">
             Start New Interview
           </button>
         </div>

@@ -7,8 +7,7 @@ import "@tensorflow/tfjs-backend-webgl";
 import "@tensorflow/tfjs-core";
 import { env } from "@huggingface/transformers";
 
-import { useMachine } from "@xstate/react";
-import { interviewMachine, Roles } from "./core/state";
+import { InterviewContext, Roles } from "./core/state";
 import { useFaceMeshDetector } from "./hooks/useFaceMeshDetector";
 import { useWhisperASR } from "./hooks/useWhisperASR";
 import { useEmotionClassifier } from "./hooks/useEmotionClassifier";
@@ -65,7 +64,8 @@ export const Screen = () => {
     offscreen.height = VIDEO_HEIGHT;
     offscreenRef.current = offscreen;
   }, []);
-  const [state, send] = useMachine(interviewMachine);
+  const state = InterviewContext.useSelector((s) => s);
+  const send = InterviewContext.useActorRef().send;
 
   useEffect(() => {
     if (setupData && state.value === "setup") {
@@ -325,7 +325,7 @@ export const Screen = () => {
   }
 
   if (state.matches("completed")) {
-    return <EvaluationModal evaluationContext={state.context} />;
+    return <Navigate to="/evaluation" replace />;
   }
 
   return (
@@ -411,7 +411,7 @@ export const Screen = () => {
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {state.context.transcript.map((m, idx) => (
+            {state.context.transcript.map((m: any, idx: number) => (
               <div
                 key={idx}
                 className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
