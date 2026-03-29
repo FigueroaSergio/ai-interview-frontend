@@ -17,7 +17,7 @@ export const EvaluationModal: React.FC = () => {
   const evaluationContext = state.context;
 
   if (state.matches('setup')) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/setup" replace />;
   }
 
   if (state.matches('evaluating')) {

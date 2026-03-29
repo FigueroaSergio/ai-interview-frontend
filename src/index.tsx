@@ -321,7 +321,7 @@ export const Screen = () => {
   };
 
   if (!setupData) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/setup" replace />;
   }
 
   if (state.matches("completed")) {
