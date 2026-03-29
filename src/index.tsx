@@ -138,12 +138,14 @@ export const Screen = () => {
         audio: true,
       });
 
-      videoRef.current.srcObject = stream;
-      videoRef.current.onloadedmetadata = () => {
-        if (!videoRef.current) return;
-        videoRef.current.play();
-        requestAnimationFrame(processFrame);
-      };
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          if (!videoRef.current) return;
+          videoRef.current.play();
+          requestAnimationFrame(processFrame);
+        };
+      }
       setCameraStarted(true);
     } catch (e) {
       console.error("Camera access denied", e);
@@ -212,8 +214,8 @@ export const Screen = () => {
     requestAnimationFrame(processFrame);
   };
 
-  const drawMesh = (ctx, keypoints) => {
-    keypoints.forEach((pt) => {
+  const drawMesh = (ctx: CanvasRenderingContext2D, keypoints: any[]) => {
+    keypoints.forEach((pt: any) => {
       ctx.beginPath();
       ctx.arc(pt.x, pt.y, 3, 0, 2 * Math.PI);
       ctx.fillStyle = "rgba(0, 255, 180, 0.4)";
@@ -258,7 +260,7 @@ export const Screen = () => {
       
       chunksRef.current = [];
       if (!videoRef.current) return;
-      const stream = videoRef.current.srcObject;
+      const stream = videoRef.current.srcObject as MediaStream;
       const recorder = new MediaRecorder(stream);
       recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
       recorder.onstop = handleVideoCaptured;
@@ -282,7 +284,7 @@ export const Screen = () => {
 
       let text = "(no transcription)";
       if (whisperPipeline) {
-        const result = await whisperPipeline(offlineAudio, {
+        const result: any = await whisperPipeline(offlineAudio, {
           return_timestamps: "word",
         });
         text = (result?.text || "").trim() || text;

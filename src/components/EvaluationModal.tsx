@@ -34,7 +34,6 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({ evaluationCont
   const { overall_score, strengths, weaknesses, missed_opportunities, improved_responses } = parsedEvaluation;
 
   // Map improved_responses to original durationMs using context transcript
-  const aiQuestions = evaluationContext.transcript.filter(t => t.role === 'ai' || t.role === 'assistant');
   const userAnswers = evaluationContext.transcript.filter(t => t.role === 'user');
 
   return (

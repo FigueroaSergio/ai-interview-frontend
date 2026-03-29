@@ -3,7 +3,7 @@ const KOKORO_MODEL_ID = "onnx-community/Kokoro-82M-ONNX";
 import { KokoroTTS } from "kokoro-js";
 
 export const useKokoroTTS = () => {
-  const [tts, setTts] = useState(null);
+  const [tts, setTts] = useState<any>(null);
   const [status, setStatus] = useState("loading");
 
   useEffect(() => {

@@ -18,11 +18,8 @@ export const useFaceMeshDetector = () => {
         const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
         const created = await faceLandmarksDetection.createDetector(model, {
           runtime: "tfjs",
-          modelType: "short",
           maxFaces: 1,
           refineLandmarks: true,
-          solutionPath: "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh",
-          detectorModelConfig: { maxFaces: 1, scoreThreshold: 0.3 },
         });
 
         if (!alive) return;

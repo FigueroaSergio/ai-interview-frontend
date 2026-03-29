@@ -48,7 +48,7 @@ export const useEmotionClassifier = (
       alive = false;
     };
   }, []);
-  const predictEmotion = (features) => {
+  const predictEmotion = (features: number[]) => {
     // Validate inputs to prevent runtime errors
     if (!classifier) {
       console.warn("Emotion classifier model is not loaded yet");
@@ -80,7 +80,7 @@ export const useEmotionClassifier = (
         const inputTensor = tf.tensor2d([features], [1, 1434]);
 
         // Run inference
-        const predictionTensor = classifier.predict(inputTensor);
+        const predictionTensor = classifier.predict(inputTensor) as tf.Tensor;
 
         // Get the index of the highest probability class
         const predictedIndex = predictionTensor.argMax(1).dataSync()[0];
