@@ -159,7 +159,7 @@ export const interviewMachine = createMachine({
             SUBMIT: [
               {
                 guard: ({ context }) =>
-                  context.questionCount <= context.maxQuestions,
+                  context.questionCount < context.quantity,
                 target: "aiThinking",
                 actions: assign({
                   questionCount: ({ context }) => context.questionCount + 1,

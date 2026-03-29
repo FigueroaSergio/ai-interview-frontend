@@ -108,7 +108,7 @@ Act as a Senior Hiring Committee member. Analyze the transcript of the interview
 </Evaluation_Criteria>
 
 <Output_Format>
-Provide a JSON object:
+Provide ONLY a valid JSON object. Do not include any introductory text, markdown code blocks, or post-response commentary. The output must be perfectly parseable by JSON.parse().
 {
   "overall_score": 0-100,
   "strengths": ["string"],
