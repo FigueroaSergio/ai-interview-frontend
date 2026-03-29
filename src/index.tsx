@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { useLocation, Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { PreviewModal } from "./components/PreviewModal";
 import { CameraModal } from "./components/CameraModal";
+import { EvaluationModal } from "./components/EvaluationModal";
 import "@tensorflow/tfjs-backend-webgl";
 import "@tensorflow/tfjs-core";
 import { env } from "@huggingface/transformers";
@@ -11,7 +12,7 @@ import { interviewMachine, Roles } from "./core/state";
 import { useFaceMeshDetector } from "./hooks/useFaceMeshDetector";
 import { useWhisperASR } from "./hooks/useWhisperASR";
 import { useEmotionClassifier } from "./hooks/useEmotionClassifier";
-import { AudioLines, AudioLinesIcon } from "lucide-react";
+import { AudioLines, RefreshCw } from "lucide-react";
 const VIDEO_WIDTH = 640;
 const VIDEO_HEIGHT = 480;
 
@@ -42,8 +43,10 @@ export const Screen = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef([]);
+  const chunksRef = useRef<BlobPart[]>([]);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const recordingStartTime = useRef<number>(0);
+  const currentDurationRef = useRef<number>(0);
 
 
   const { detector, status: faceStatus } = useFaceMeshDetector();
@@ -244,6 +247,7 @@ export const Screen = () => {
     if (isRecording) {
       if (!mediaRecorderRef.current) return;
       mediaRecorderRef.current.stop();
+      currentDurationRef.current = Date.now() - recordingStartTime.current;
       setIsRecording(false);
     } else {
       if (playingAudio) {
@@ -258,6 +262,7 @@ export const Screen = () => {
       const recorder = new MediaRecorder(stream);
       recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
       recorder.onstop = handleVideoCaptured;
+      recordingStartTime.current = Date.now();
       recorder.start();
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
@@ -300,7 +305,7 @@ export const Screen = () => {
   };
 
   const handleSend = () => {
-    send({ type: "SUBMIT", payload: previewText, videoUrl: previewVideoUrl });
+    send({ type: "SUBMIT", payload: previewText, videoUrl: previewVideoUrl, durationMs: currentDurationRef.current });
     setShowPreview(false);
     setPreviewText("");
     setPreviewEmotion("");
@@ -316,6 +321,10 @@ export const Screen = () => {
 
   if (!setupData) {
     return <Navigate to="/" replace />;
+  }
+
+  if (state.matches("completed")) {
+    return <EvaluationModal evaluationContext={state.context} />;
   }
 
   return (
@@ -478,6 +487,36 @@ export const Screen = () => {
             <div ref={chatEndRef} />
           </div>
 
+          {(state.matches("error") || status.toUpperCase().includes("ERROR") || status.toUpperCase().includes("FAILED")) && (
+            <div className="px-6 py-5 bg-surface-container-low border-t border-surface-container-highest animate-in relative z-10">
+              <div className="flex flex-col items-center gap-4">
+                <div className="text-center group-hover:scale-105 transition-transform">
+                  <span className="text-[10px] text-red-500 uppercase font-black tracking-[0.25em] block mb-1.5 opacity-80">
+                    System Alert
+                  </span>
+                  <p className="text-on-surface text-sm font-bold leading-tight">
+                    {state.matches("error") ? state.context.errorMessage : status}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    if (state.matches("error")) {
+                      send({ type: "RETRY" });
+                    } else if (status === "Processing failed.") {
+                      setStatus("Ready");
+                    } else {
+                      window.location.reload();
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-[#a8362a] text-white font-black rounded-2xl shadow-[0_20px_40px_rgba(168,54,42,0.25)] hover:scale-[1.02] active:scale-95 transition-all group"
+                >
+                  <RefreshCw className="w-5 h-5 group-hover:rotate-180 transition-transform duration-700" />
+                  RETRY SYSTEM
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="p-4 bg-surface-container">
             <div className="text-[10px] text-on-surface-variant uppercase font-bold text-center leading-relaxed tracking-wider">
               No data leaves this browser.
@@ -491,6 +530,7 @@ export const Screen = () => {
       {showPreview && (
         <PreviewModal
           previewText={previewText}
+          setPreviewText={setPreviewText}
           previewEmotion={previewEmotion}
           previewVideoUrl={previewVideoUrl}
           handleReRecord={handleReRecord}

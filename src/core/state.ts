@@ -13,6 +13,7 @@ export type Transcript = {
   content: string;
   audio?: HTMLAudioElement;
   videoUrl?: string;
+  durationMs?: number;
 };
 
 export type ContextInterview = {
@@ -92,7 +93,7 @@ export const interviewMachine = createMachine({
               actions: assign({
                 transcript: ({ context, event }) => [
                   ...context.transcript,
-                  { role: Roles.User, content: event.payload, videoUrl: event.videoUrl },
+                  { role: Roles.User, content: event.payload, videoUrl: event.videoUrl, durationMs: event.durationMs },
                 ],
               }),
             },
@@ -140,7 +141,7 @@ export const interviewMachine = createMachine({
               actions: assign({
                 transcript: ({ context, event }) => [
                   ...context.transcript,
-                  { role: "ai", content: event.output.text, audio: event.output.audio },
+                  { role:Roles.Ai, content: event.output.text, audio: event.output.audio },
                 ],
               }),
             },
@@ -164,7 +165,7 @@ export const interviewMachine = createMachine({
                   questionCount: ({ context }) => context.questionCount + 1,
                   transcript: ({ context, event }) => [
                     ...context.transcript,
-                    { role: "user", content: event.payload, videoUrl: event.videoUrl },
+                    { role: Roles.User, content: event.payload, videoUrl: event.videoUrl, durationMs: event.durationMs },
                   ],
                 }),
               },
@@ -173,7 +174,7 @@ export const interviewMachine = createMachine({
                 actions: assign({
                   transcript: ({ context, event }) => [
                     ...context.transcript,
-                    { role: "user", content: event.payload, videoUrl: event.videoUrl },
+                    { role: Roles.User, content: event.payload, videoUrl: event.videoUrl, durationMs: event.durationMs },
                   ],
                 }),
               },

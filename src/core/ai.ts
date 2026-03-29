@@ -96,16 +96,62 @@ Transcript: ${JSON.stringify(transcript)}
 }
 
 export async function getFinalEvaluation(context: ContextInterview) {
-  const systemInstruction = `Act as a Lead Interviewer. Evaluate the candidate for the role: ${context.role}.`;
+  const systemInstruction = `
+<Task>
+Act as a Senior Hiring Committee member. Analyze the transcript of the interview session.
+</Task>
+
+<Evaluation_Criteria>
+- Communication: Did they use filler words? Was the tone appropriate?
+- Technical Depth: Did they demonstrate 'Senior' level knowledge or just 'Junior' surface level?
+- STAR Alignment: Rate each answer 1-10 on how well they followed the STAR framework.
+</Evaluation_Criteria>
+
+<Output_Format>
+Provide a JSON object:
+{
+  "overall_score": 0-100,
+  "strengths": ["string"],
+  "weaknesses": ["string"],
+  "missed_opportunities": "Specific things the candidate should have mentioned based on their resume but didn't.",
+  "improved_responses": [
+    {"question": "string", "better_version": "string"}
+  ]
+}
+</Output_Format>
+  `;
 
   const messages = [
     {
-      role: "user",
-      content: `Resume: ${context.resume}\n\nTranscript: ${JSON.stringify(context.transcript)}`,
+      role: "user" as Roles,
+      content: `Role: ${context.role}\nResume: ${context.resume}\n\nTranscript: ${JSON.stringify(context.transcript)}`,
     },
   ];
+
+  console.log("FINAL EVALUATION");
   const result = await Chat(messages, systemInstruction);
-  const text = result ?? "";
-  const audio = await generateVoice(text);
-  return { text, audio };
+  
+  function cleanJsonResponse(rawString: string) {
+    return rawString.replace(/^```json|```$/gm, "").trim();
+  }
+
+  let finalEvaluation = "";
+  try {
+    const rawText = result ?? "";
+    const cleaned = cleanJsonResponse(rawText);
+    // ensure it's valid JSON
+    JSON.parse(cleaned);
+    finalEvaluation = cleaned;
+  } catch(e) {
+    console.warn("Failed to parse evaluation output", e);
+    finalEvaluation = JSON.stringify({
+      overall_score: 0,
+      strengths: [],
+      weaknesses: ["Failed to parse AI response"],
+      missed_opportunities: "",
+      improved_responses: []
+    });
+  }
+
+  return { text: finalEvaluation, audio: null };
 }
