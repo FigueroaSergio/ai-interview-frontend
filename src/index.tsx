@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { PreviewModal } from "./components/PreviewModal";
 import { CameraModal } from "./components/CameraModal";
-import { EvaluationModal } from "./components/EvaluationModal";
 import "@tensorflow/tfjs-backend-webgl";
 import "@tensorflow/tfjs-core";
 import { env } from "@huggingface/transformers";
@@ -16,9 +15,6 @@ const VIDEO_WIDTH = 640;
 const VIDEO_HEIGHT = 480;
 
 env.allowLocalModels = false;
-
-
-
 
 export const Screen = () => {
   const [status, setStatus] = useState("Initializing models...");
@@ -45,7 +41,6 @@ export const Screen = () => {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const recordingStartTime = useRef<number>(0);
   const currentDurationRef = useRef<number>(0);
-
 
   const { detector, status: faceStatus } = useFaceMeshDetector();
   const { whisperPipeline, status: whisperStatus } = useWhisperASR();
@@ -128,7 +123,6 @@ export const Screen = () => {
   useEffect(() => {
     scrollToBottom();
   }, [state.context.transcript, isProcessing, state.value]);
-
 
   const startCamera = async () => {
     try {
@@ -231,15 +225,15 @@ export const Screen = () => {
       playingAudio.pause();
       playingAudio.currentTime = 0;
     }
-    
+
     setPlayingAudio(audio);
-    
+
     audio.onended = () => setPlayingAudio(null);
     audio.onpause = () => setPlayingAudio(null);
-    
+
     try {
       await audio.play();
-    } catch(e) {
+    } catch (e) {
       setPlayingAudio(null);
     }
   };
@@ -256,7 +250,7 @@ export const Screen = () => {
         playingAudio.currentTime = 0;
         setPlayingAudio(null);
       }
-      
+
       chunksRef.current = [];
       if (!videoRef.current) return;
       const stream = videoRef.current.srcObject as MediaStream;
@@ -306,7 +300,12 @@ export const Screen = () => {
   };
 
   const handleSend = () => {
-    send({ type: "SUBMIT", payload: previewText, videoUrl: previewVideoUrl, durationMs: currentDurationRef.current });
+    send({
+      type: "SUBMIT",
+      payload: previewText,
+      videoUrl: previewVideoUrl,
+      durationMs: currentDurationRef.current,
+    });
     setShowPreview(false);
     setPreviewText("");
     setPreviewEmotion("");
@@ -439,7 +438,13 @@ export const Screen = () => {
                       className="mt-4 px-4 py-2 bg-surface-container-highest hover:bg-surface-container text-on-surface font-semibold text-xs rounded-xl transition-colors"
                     >
                       <span className="flex items-center gap-2">
-                        <AudioLines className={playingAudio === m.audio ? "animate-pulse text-primary" : ""} /> 
+                        <AudioLines
+                          className={
+                            playingAudio === m.audio
+                              ? "animate-pulse text-primary"
+                              : ""
+                          }
+                        />
                         {playingAudio === m.audio ? "Playing..." : "Play Audio"}
                       </span>
                     </button>
@@ -488,7 +493,9 @@ export const Screen = () => {
             <div ref={chatEndRef} />
           </div>
 
-          {(state.matches("error") || status.toUpperCase().includes("ERROR") || status.toUpperCase().includes("FAILED")) && (
+          {(state.matches("error") ||
+            status.toUpperCase().includes("ERROR") ||
+            status.toUpperCase().includes("FAILED")) && (
             <div className="px-6 py-5 bg-surface-container-low border-t border-surface-container-highest animate-in relative z-10">
               <div className="flex flex-col items-center gap-4">
                 <div className="text-center group-hover:scale-105 transition-transform">
@@ -496,7 +503,9 @@ export const Screen = () => {
                     System Alert
                   </span>
                   <p className="text-on-surface text-sm font-bold leading-tight">
-                    {state.matches("error") ? state.context.errorMessage : status}
+                    {state.matches("error")
+                      ? state.context.errorMessage
+                      : status}
                   </p>
                 </div>
                 <button
