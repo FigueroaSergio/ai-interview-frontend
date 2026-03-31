@@ -1,199 +1,9 @@
+import { WavStreamPlayer } from "wavtools";
 import { Roles, type ContextInterview, type Transcript } from "./state";
 import { Chat } from "./chat";
 const API_BASE_URL = import.meta.env.VITE_CHAT_API;
 
-class WavStreamPlayer {
-  private audioContext: AudioContext;
-  private reader: ReadableStreamDefaultReader<Uint8Array> | null;
-  private nextStartTime: number = 0;
-  private isProcessing = false;
-  private headerInfo: { sampleRate: number; channels: number } | null = null;
-  private allChunks: Uint8Array[] = [];
-  private isStreamExhausted = false;
-  private cachedFullBuffer: AudioBuffer | null = null;
-
-  public onended?: () => void;
-  public onpause?: () => void;
-  public currentTime: number = 0;
-
-  constructor(response: Response) {
-    const AudioContextClass =
-      (window as any).AudioContext || (window as any).webkitAudioContext;
-    this.audioContext = new AudioContextClass();
-    this.reader = response.body!.getReader();
-  }
-
-  async play() {
-    if (this.isProcessing) {
-      if (this.audioContext.state === "suspended") {
-        await this.audioContext.resume();
-      }
-      return;
-    }
-
-    if (this.isStreamExhausted) {
-      this.playFromCache();
-      return;
-    }
-
-    this.isProcessing = true;
-    this.nextStartTime = this.audioContext.currentTime;
-
-    try {
-      let leftover = new Uint8Array(0);
-      let headerSkipped = false;
-
-      while (this.reader) {
-        const { done, value } = await this.reader.read();
-
-        if (done) {
-          this.isStreamExhausted = true;
-          this.reader = null;
-          this.prepareFullBuffer();
-
-          const remainingTime =
-            (this.nextStartTime - this.audioContext.currentTime) * 1000;
-          setTimeout(
-            () => {
-              if (this.onended) this.onended();
-              this.isProcessing = false;
-            },
-            Math.max(0, remainingTime),
-          );
-          break;
-        }
-
-        this.allChunks.push(value);
-
-        let chunk = new Uint8Array(leftover.length + value.length);
-        chunk.set(leftover);
-        chunk.set(value, leftover.length);
-        leftover = new Uint8Array(0);
-
-        if (!headerSkipped) {
-          if (chunk.length < 44) {
-            leftover = chunk;
-            continue;
-          }
-          const view = new DataView(
-            chunk.buffer,
-            chunk.byteOffset,
-            chunk.byteLength,
-          );
-          const sampleRate = view.getUint32(24, true);
-          const channels = view.getUint16(22, true);
-          this.headerInfo = { sampleRate, channels };
-
-          chunk = chunk.slice(44);
-          headerSkipped = true;
-        }
-
-        if (chunk.length > 0) {
-          if (chunk.length % 2 !== 0) {
-            leftover = chunk.slice(chunk.length - 1);
-            chunk = chunk.slice(0, chunk.length - 1);
-          }
-
-          if (chunk.length > 0) {
-            this.enqueueChunk(chunk);
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Streaming error", e);
-      this.isProcessing = false;
-    }
-  }
-
-  private prepareFullBuffer() {
-    if (!this.headerInfo || this.allChunks.length === 0) return;
-
-    const { sampleRate, channels } = this.headerInfo;
-    const totalLength = this.allChunks.reduce((acc, c) => acc + c.length, 0);
-    const fullRaw = new Uint8Array(totalLength);
-    let offset = 0;
-    for (const chunk of this.allChunks) {
-      fullRaw.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    const pcmData = fullRaw.slice(44);
-    const samplesPerChannel = pcmData.length / 2 / channels;
-    const buffer = this.audioContext.createBuffer(
-      channels,
-      samplesPerChannel,
-      sampleRate,
-    );
-    const view = new DataView(pcmData.buffer);
-
-    for (let c = 0; c < channels; c++) {
-      const channelData = buffer.getChannelData(c);
-      for (let i = 0; i < samplesPerChannel; i++) {
-        const off = (i * channels + c) * 2;
-        if (off + 1 < pcmData.length) {
-          channelData[i] = view.getInt16(off, true) / 32768.0;
-        }
-      }
-    }
-    this.cachedFullBuffer = buffer;
-  }
-
-  private playFromCache() {
-    if (!this.cachedFullBuffer) return;
-
-    if (this.audioContext.state === "suspended") {
-      this.audioContext.resume();
-    }
-
-    const source = this.audioContext.createBufferSource();
-    source.buffer = this.cachedFullBuffer;
-    source.connect(this.audioContext.destination);
-    source.onended = () => {
-      this.isProcessing = false;
-      if (this.onended) this.onended();
-    };
-
-    this.isProcessing = true;
-    source.start(0);
-  }
-
-  private enqueueChunk(chunk: Uint8Array) {
-    if (!this.headerInfo) return;
-
-    const { sampleRate, channels } = this.headerInfo;
-    const samplesPerChannel = chunk.length / 2 / channels;
-    const audioBuffer = this.audioContext.createBuffer(
-      channels,
-      samplesPerChannel,
-      sampleRate,
-    );
-    const view = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-
-    for (let c = 0; c < channels; c++) {
-      const channelData = audioBuffer.getChannelData(c);
-      for (let i = 0; i < samplesPerChannel; i++) {
-        const offset = (i * channels + c) * 2;
-        channelData[i] = view.getInt16(offset, true) / 32768.0;
-      }
-    }
-
-    const source = this.audioContext.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(this.audioContext.destination);
-
-    const playTime = Math.max(
-      this.audioContext.currentTime,
-      this.nextStartTime,
-    );
-    source.start(playTime);
-    this.nextStartTime = playTime + audioBuffer.duration;
-  }
-
-  pause() {
-    this.audioContext.suspend();
-    if (this.onpause) this.onpause();
-  }
-}
+let globalPlayer: WavStreamPlayer | null = null;
 
 export const generateVoice = async (text: string) => {
   if (!text) return null;
@@ -208,12 +18,106 @@ export const generateVoice = async (text: string) => {
     if (!response.ok) throw new Error("Generation failed");
     if (!response.body) throw new Error("No response body");
 
-    return new WavStreamPlayer(response) as any;
+    if (!globalPlayer) {
+      globalPlayer = new WavStreamPlayer({ sampleRate: 44100 });
+      await globalPlayer.connect();
+    } else {
+      // Interrupt previous playback
+      await globalPlayer.interrupt();
+    }
+
+    const player = globalPlayer;
+    let allPcmChunks: Int16Array[] = [];
+    let isStreamFinished = false;
+
+    const audioWrapper = {
+      onended: null as (() => void) | null,
+      onpause: null as (() => void) | null,
+      play: async () => {
+        if (player.context && player.context.state === "suspended") {
+          await player.context.resume();
+        }
+        // If the stream finished, we can replay from our cached chunks
+        if (isStreamFinished && allPcmChunks.length > 0) {
+          await player.interrupt();
+          for (const pcm of allPcmChunks) {
+            player.add16BitPCM(pcm);
+          }
+          // Emit onended after a short delay since we re-played
+          setTimeout(() => {
+            if (audioWrapper.onended) audioWrapper.onended();
+          }, 1000); // Approximate duration or we could calculate it
+        }
+      },
+      pause: () => {
+        player.interrupt();
+        if (audioWrapper.onpause) audioWrapper.onpause();
+      },
+      get currentTime() { return 0; },
+      set currentTime(_: number) { /* ignore */ },
+    };
+
+    // Consolidated Stream Processing
+    (async () => {
+      const reader = response.body!.getReader();
+      let bytesReceived = 0;
+      let leftOver: Uint8Array | null = null;
+      const HEADER_SIZE = 44;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          let data = value;
+          if (leftOver) {
+            const combined = new Uint8Array(leftOver.length + data.length);
+            combined.set(leftOver);
+            combined.set(data, leftOver.length);
+            data = combined;
+            leftOver = null;
+          }
+
+          // Skip WAV header logic
+          if (bytesReceived < HEADER_SIZE) {
+            const needed = HEADER_SIZE - bytesReceived;
+            if (data.length <= needed) {
+              bytesReceived += data.length;
+              continue;
+            }
+            data = data.slice(needed);
+            bytesReceived = HEADER_SIZE;
+          }
+
+          // Int16 Alignment Logic (Ensure 2-byte samples)
+          if (data.length % 2 !== 0) {
+            leftOver = data.slice(-1);
+            data = data.slice(0, -1);
+          }
+
+          if (data.length > 0) {
+            const pcm = new Int16Array(data.buffer, data.byteOffset, data.byteLength / 2);
+            allPcmChunks.push(pcm);
+            player.add16BitPCM(pcm.buffer);
+          }
+        }
+      } catch (e) {
+        console.error("Stream error:", e);
+      } finally {
+        isStreamFinished = true;
+        setTimeout(() => {
+          if (audioWrapper.onended) audioWrapper.onended();
+        }, 500);
+      }
+    })().catch(console.error);
+
+    return audioWrapper as any;
   } catch (error) {
     console.error("Error generating audio:", error);
   }
   return null;
 };
+
 export async function getInterviewQuestion(stateContext: ContextInterview) {
   // Construct the "Brain" prompt using the XState Context
   const systemInstruction = `
