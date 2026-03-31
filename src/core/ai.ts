@@ -2,8 +2,201 @@ import { Roles, type ContextInterview, type Transcript } from "./state";
 import { Chat } from "./chat";
 const API_BASE_URL = import.meta.env.VITE_CHAT_API;
 
+class WavStreamPlayer {
+  private audioContext: AudioContext;
+  private reader: ReadableStreamDefaultReader<Uint8Array> | null;
+  private nextStartTime: number = 0;
+  private isProcessing = false;
+  private headerInfo: { sampleRate: number; channels: number } | null = null;
+  private allChunks: Uint8Array[] = [];
+  private isStreamExhausted = false;
+  private cachedFullBuffer: AudioBuffer | null = null;
+
+  public onended?: () => void;
+  public onpause?: () => void;
+  public currentTime: number = 0;
+
+  constructor(response: Response) {
+    const AudioContextClass =
+      (window as any).AudioContext || (window as any).webkitAudioContext;
+    this.audioContext = new AudioContextClass();
+    this.reader = response.body!.getReader();
+  }
+
+  async play() {
+    if (this.isProcessing) {
+      if (this.audioContext.state === "suspended") {
+        await this.audioContext.resume();
+      }
+      return;
+    }
+
+    if (this.isStreamExhausted) {
+      this.playFromCache();
+      return;
+    }
+
+    this.isProcessing = true;
+    this.nextStartTime = this.audioContext.currentTime;
+
+    try {
+      let leftover = new Uint8Array(0);
+      let headerSkipped = false;
+
+      while (this.reader) {
+        const { done, value } = await this.reader.read();
+
+        if (done) {
+          this.isStreamExhausted = true;
+          this.reader = null;
+          this.prepareFullBuffer();
+
+          const remainingTime =
+            (this.nextStartTime - this.audioContext.currentTime) * 1000;
+          setTimeout(
+            () => {
+              if (this.onended) this.onended();
+              this.isProcessing = false;
+            },
+            Math.max(0, remainingTime),
+          );
+          break;
+        }
+
+        this.allChunks.push(value);
+
+        let chunk = new Uint8Array(leftover.length + value.length);
+        chunk.set(leftover);
+        chunk.set(value, leftover.length);
+        leftover = new Uint8Array(0);
+
+        if (!headerSkipped) {
+          if (chunk.length < 44) {
+            leftover = chunk;
+            continue;
+          }
+          const view = new DataView(
+            chunk.buffer,
+            chunk.byteOffset,
+            chunk.byteLength,
+          );
+          const sampleRate = view.getUint32(24, true);
+          const channels = view.getUint16(22, true);
+          this.headerInfo = { sampleRate, channels };
+
+          chunk = chunk.slice(44);
+          headerSkipped = true;
+        }
+
+        if (chunk.length > 0) {
+          if (chunk.length % 2 !== 0) {
+            leftover = chunk.slice(chunk.length - 1);
+            chunk = chunk.slice(0, chunk.length - 1);
+          }
+
+          if (chunk.length > 0) {
+            this.enqueueChunk(chunk);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Streaming error", e);
+      this.isProcessing = false;
+    }
+  }
+
+  private prepareFullBuffer() {
+    if (!this.headerInfo || this.allChunks.length === 0) return;
+
+    const { sampleRate, channels } = this.headerInfo;
+    const totalLength = this.allChunks.reduce((acc, c) => acc + c.length, 0);
+    const fullRaw = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of this.allChunks) {
+      fullRaw.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    const pcmData = fullRaw.slice(44);
+    const samplesPerChannel = pcmData.length / 2 / channels;
+    const buffer = this.audioContext.createBuffer(
+      channels,
+      samplesPerChannel,
+      sampleRate,
+    );
+    const view = new DataView(pcmData.buffer);
+
+    for (let c = 0; c < channels; c++) {
+      const channelData = buffer.getChannelData(c);
+      for (let i = 0; i < samplesPerChannel; i++) {
+        const off = (i * channels + c) * 2;
+        if (off + 1 < pcmData.length) {
+          channelData[i] = view.getInt16(off, true) / 32768.0;
+        }
+      }
+    }
+    this.cachedFullBuffer = buffer;
+  }
+
+  private playFromCache() {
+    if (!this.cachedFullBuffer) return;
+
+    if (this.audioContext.state === "suspended") {
+      this.audioContext.resume();
+    }
+
+    const source = this.audioContext.createBufferSource();
+    source.buffer = this.cachedFullBuffer;
+    source.connect(this.audioContext.destination);
+    source.onended = () => {
+      this.isProcessing = false;
+      if (this.onended) this.onended();
+    };
+
+    this.isProcessing = true;
+    source.start(0);
+  }
+
+  private enqueueChunk(chunk: Uint8Array) {
+    if (!this.headerInfo) return;
+
+    const { sampleRate, channels } = this.headerInfo;
+    const samplesPerChannel = chunk.length / 2 / channels;
+    const audioBuffer = this.audioContext.createBuffer(
+      channels,
+      samplesPerChannel,
+      sampleRate,
+    );
+    const view = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+
+    for (let c = 0; c < channels; c++) {
+      const channelData = audioBuffer.getChannelData(c);
+      for (let i = 0; i < samplesPerChannel; i++) {
+        const offset = (i * channels + c) * 2;
+        channelData[i] = view.getInt16(offset, true) / 32768.0;
+      }
+    }
+
+    const source = this.audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(this.audioContext.destination);
+
+    const playTime = Math.max(
+      this.audioContext.currentTime,
+      this.nextStartTime,
+    );
+    source.start(playTime);
+    this.nextStartTime = playTime + audioBuffer.duration;
+  }
+
+  pause() {
+    this.audioContext.suspend();
+    if (this.onpause) this.onpause();
+  }
+}
+
 export const generateVoice = async (text: string) => {
-  if (!text) return;
+  if (!text) return null;
 
   try {
     const response = await fetch(`${API_BASE_URL}/audio`, {
@@ -13,14 +206,9 @@ export const generateVoice = async (text: string) => {
     });
 
     if (!response.ok) throw new Error("Generation failed");
+    if (!response.body) throw new Error("No response body");
 
-    // 1. Convert response stream to a Blob
-    const blob = await response.blob();
-
-    // 2. Create a "Temporal" URL for the blob
-    const audioUrl = URL.createObjectURL(blob);
-
-    return new Audio(audioUrl);
+    return new WavStreamPlayer(response) as any;
   } catch (error) {
     console.error("Error generating audio:", error);
   }
@@ -130,7 +318,7 @@ Provide ONLY a valid JSON object. Do not include any introductory text, markdown
 
   console.log("FINAL EVALUATION");
   const result = await Chat(messages, systemInstruction);
-  
+
   function cleanJsonResponse(rawString: string) {
     return rawString.replace(/^```json|```$/gm, "").trim();
   }
@@ -142,14 +330,14 @@ Provide ONLY a valid JSON object. Do not include any introductory text, markdown
     // ensure it's valid JSON
     JSON.parse(cleaned);
     finalEvaluation = cleaned;
-  } catch(e) {
+  } catch (e) {
     console.warn("Failed to parse evaluation output", e);
     finalEvaluation = JSON.stringify({
       overall_score: 0,
       strengths: [],
       weaknesses: ["Failed to parse AI response"],
       missed_opportunities: "",
-      improved_responses: []
+      improved_responses: [],
     });
   }
 
